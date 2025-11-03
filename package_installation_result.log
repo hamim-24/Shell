@@ -1,0 +1,11 @@
+==> Fetching downloads for: cmatrix
+==> Downloading https://ghcr.io/v2/homebrew/core/cmatrix/manifests/2.0
+Already downloaded: /Users/Inz_mac/Library/Caches/Homebrew/downloads/3049e917d52faf55b7b2cef0a049f3610c2a8214729025b1a9e14ac9ab7189a8--cmatrix-2.0.bottle_manifest.json
+==> Fetching cmatrix
+==> Downloading https://ghcr.io/v2/homebrew/core/cmatrix/blobs/sha256:3e9a355625f0fde46f71845797d28ee84f3613df8ede85373b754f13ca156170
+Already downloaded: /Users/Inz_mac/Library/Caches/Homebrew/downloads/7ef794cb370569c8c5bf2abbc9ecfb54c602817c7a30d34c3d21dd38d30efa96--cmatrix--2.0.arm64_tahoe.bottle.tar.gz
+==> Pouring cmatrix--2.0.arm64_tahoe.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/cmatrix/2.0: 11 files, 80.3KB
+==> Running `brew cleanup cmatrix`...
+Disable this behaviour by setting `HOMEBREW_NO_INSTALL_CLEANUP=1`.
+Hide these hints with `HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).

@@ -1,6 +1,6 @@
 #!/bin/zsh
 
-echo "Which package do you want to check : "
+echo "Which package do you wanna check : "
 read package
 
 brew=/opt/homebrew/bin/brew
@@ -23,15 +23,24 @@ else
 
     if [[ $ans == "Y" || $ans == "y" ]]
     then
-        $brew install $package
+        $brew install $package >> package_installation_result.log
+    else
+        echo "Program exit.."
+        exit 1
     fi
 
-    echo "Do you wanna run it(y/n)?"
-    read ans
-
-    if [[ $ans == "Y" || $ans == "y" ]]
+    if [ $? -eq 0 ] 
     then
-        $path
+
+        echo "Do you wanna run it(y/n)?"
+        read ans
+
+        if [[ $ans == "Y" || $ans == "y" ]]
+        then
+            $path
+        fi
+    else
+        echo "The package doesn't exist"
     fi
 
 fi
