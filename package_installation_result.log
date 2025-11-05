@@ -9,3 +9,26 @@ Already downloaded: /Users/Inz_mac/Library/Caches/Homebrew/downloads/7ef794cb370
 ==> Running `brew cleanup cmatrix`...
 Disable this behaviour by setting `HOMEBREW_NO_INSTALL_CLEANUP=1`.
 Hide these hints with `HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).
+==> Fetching downloads for: sl
+==> Downloading https://ghcr.io/v2/homebrew/core/sl/manifests/5.02
+Already downloaded: /Users/Inz_mac/Library/Caches/Homebrew/downloads/2a315436336f0068d5e79b27e25bd5fc6c7b982e8977dbd0a29ad0a02cbdf828--sl-5.02.bottle_manifest.json
+==> Fetching sl
+==> Downloading https://ghcr.io/v2/homebrew/core/sl/blobs/sha256:99c2620dc9fe4058ba790fd445adf4160f5201ef2ad2abae5b9d90b707684f26
+Already downloaded: /Users/Inz_mac/Library/Caches/Homebrew/downloads/9449d07d947447a9069760b5607f1609f821f5e961ae6cc5ac6af4ef1e964ebc--sl--5.02.arm64_tahoe.bottle.tar.gz
+==> Pouring sl--5.02.arm64_tahoe.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/sl/5.02: 7 files, 40.2KB
+==> Running `brew cleanup sl`...
+Disable this behaviour by setting `HOMEBREW_NO_INSTALL_CLEANUP=1`.
+Hide these hints with `HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).
+==> Searching for similarly named formulae and casks...
+==> Formulae
+pacmc
+
+To install pacmc, run:
+  brew install pacmc
+
+==> Casks
+spaceman
+
+To install spaceman, run:
+  brew install --cask spaceman
