@@ -32,3 +32,5 @@ spaceman
 
 To install spaceman, run:
   brew install --cask spaceman
+==> Fetching downloads for: sd
+==> Downloading https://ghcr.io/v2/homebrew/core/sd/manifests/1.0.0

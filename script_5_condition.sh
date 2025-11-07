@@ -6,17 +6,26 @@ read package
 brew=/opt/homebrew/bin/brew
 path=/opt/homebrew/bin/$package
 
-if [ -f "$path" ]
-then 
-    echo "The package exist."
-    echo "Path : $path"
+ 
+run() {
+
     echo "Do you wanna run it(y/n)?"
     read ans
-
+    
     if [[ $ans == "Y" || $ans == "y" ]]
     then
         $path
     fi
+
+}
+
+if [ -f "$path" ]
+then 
+    echo "The package exist."
+    echo "Path : $path"
+
+    run
+
 else 
     echo "It doesn't exist. Do you wanna download it(y/n)?"
     read ans
@@ -31,14 +40,8 @@ else
 
     if [ $? -eq 0 ] 
     then
-
-        echo "Do you wanna run it(y/n)?"
-        read ans
-
-        if [[ $ans == "Y" || $ans == "y" ]]
-        then
-            $path
-        fi
+        run
+        
     else
         echo "The package doesn't exist"
     fi
@@ -46,3 +49,5 @@ else
 fi
 
 echo "Programm exit..."
+
+
