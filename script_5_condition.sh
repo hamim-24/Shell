@@ -50,4 +50,3 @@ fi
 
 echo "Programm exit..."
 
-
