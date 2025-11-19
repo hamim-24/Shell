@@ -161,12 +161,32 @@ run_or_warn() {
   else
     if echo "${output}" | grep -qi "permission\|denied\|fix your permissions" 2>/dev/null; then
       notify_warn "${description} failed: Permission denied"
-      local path_hint
-      path_hint=$(echo "${output}" | grep -o '/[^ ]*' | head -1 2>/dev/null || true)
-      if [[ -n ${path_hint} ]]; then
-        printf "${COLOR_WARN}Try: sudo chown -R \$(whoami) %s\n${COLOR_RESET}" "${path_hint}"
+      
+      # Special handling for Homebrew permission issues
+      if [[ ${description} =~ [Bb]rew ]] && [[ ${OS} == "macOS" ]]; then
+        printf "\n${COLOR_INFO}Homebrew Permission Fix:${COLOR_RESET}\n"
+        printf "${COLOR_HILIGHT}Run this command to fix Homebrew permissions:${COLOR_RESET}\n"
+        printf "${COLOR_SUCCESS}sudo chown -R \$(whoami) /opt/homebrew /usr/local/Homebrew 2>/dev/null || true${COLOR_RESET}\n\n"
+        printf "${COLOR_INFO}Or try running with elevated permissions:${COLOR_RESET}\n"
+        printf "${COLOR_SUCCESS}sudo brew cleanup${COLOR_RESET}\n\n"
+        if confirm "Fix Homebrew permissions automatically?"; then
+          printf "${COLOR_INFO}Fixing Homebrew permissions...${COLOR_RESET}\n"
+          if sudo chown -R "$(whoami)" /opt/homebrew /usr/local/Homebrew 2>/dev/null; then
+            printf "${COLOR_SUCCESS}✓ Permissions fixed. Retrying cleanup...${COLOR_RESET}\n"
+            if brew cleanup 2>/dev/null; then
+              printf "${COLOR_SUCCESS}✓ Brew cleanup completed successfully${COLOR_RESET}\n"
+              return 0
+            fi
+          fi
+        fi
       else
-        printf "${COLOR_WARN}Check permissions or try with sudo\n${COLOR_RESET}"
+        local path_hint
+        path_hint=$(echo "${output}" | grep -o '/[^ ]*' | head -1 2>/dev/null || true)
+        if [[ -n ${path_hint} ]]; then
+          printf "${COLOR_WARN}Try: sudo chown -R \$(whoami) %s\n${COLOR_RESET}" "${path_hint}"
+        else
+          printf "${COLOR_WARN}Check permissions or try with sudo\n${COLOR_RESET}"
+        fi
       fi
     else
       notify_warn "${description} failed"
@@ -724,7 +744,14 @@ list_outdated() {
 clean_cache() {
   case "${PKG_MANAGER}" in
     brew) 
-      run_or_warn "Brew cleanup" brew cleanup
+      if ! run_or_warn "Brew cleanup" brew cleanup; then
+        printf "\n${COLOR_INFO}Trying alternative cleanup methods...${COLOR_RESET}\n"
+        if run_or_warn "Brew cleanup with sudo" sudo brew cleanup; then
+          printf "${COLOR_SUCCESS}✓ Cleanup completed with elevated permissions${COLOR_RESET}\n"
+        else
+          printf "${COLOR_WARN}Manual cleanup required. Try: brew doctor${COLOR_RESET}\n"
+        fi
+      fi
       run_or_warn "Brew autoremove" brew autoremove
       ;;
     apt) 
@@ -1137,65 +1164,167 @@ network_speed_test() {
     return
   fi
   
-  printf "${COLOR_INFO}Running Internet Speed Test...${COLOR_RESET}\n\n"
+  printf "${COLOR_INFO}Internet Speed Test${COLOR_RESET}\n\n"
   
-  # Test download speed with multiple fallback URLs
-  printf "Testing download speed (5MB file)...\n"
-  local test_urls=(
-    "https://httpbin.org/bytes/5242880"
-    "https://github.com/microsoft/vscode/archive/refs/heads/main.zip"
-    "https://releases.ubuntu.com/20.04/ubuntu-20.04.6-desktop-amd64.iso.torrent"
+  # Reliable test files from fast CDNs
+  local test_files=(
+    "1MB:http://speedtest.ftp.otenet.gr/files/test1Mb.db:1048576"
+    "10MB:http://speedtest.ftp.otenet.gr/files/test10Mb.db:10485760"
+    "100MB:http://speedtest.ftp.otenet.gr/files/test100Mb.db:104857600"
   )
   
-  local success=false
-  for url in "${test_urls[@]}"; do
-    local start_time end_time duration speed_mbps
+  # Fallback test URLs
+  local fallback_urls=(
+    "http://ipv4.download.thinkbroadband.com/5MB.zip:5242880"
+    "http://ipv4.download.thinkbroadband.com/10MB.zip:10485760"
+    "https://proof.ovh.net/files/1Mb.dat:1048576"
+  )
+  
+  local best_speed=0
+  local total_downloaded=0
+  local total_time=0
+  local tests_completed=0
+  
+  printf "${COLOR_INFO}Testing download speed...${COLOR_RESET}\n"
+  
+  # Test with primary files
+  for test_file in "${test_files[@]}"; do
+    IFS=':' read -r size_name url file_size <<< "${test_file}"
+    printf "Testing %s file... " "${size_name}"
+    
+    local start_time end_time
     start_time=$(date +%s)
     
-    if curl -s -L --max-time 30 -o /dev/null "${url}" 2>/dev/null; then
+    if timeout 30 curl -s --max-time 25 -o /dev/null "${url}" 2>/dev/null; then
       end_time=$(date +%s)
-      duration=$((end_time - start_time))
+      local duration=$((end_time - start_time))
       
       if [[ ${duration} -gt 0 ]]; then
-        # 5MB = 40 Megabits, divide by duration in seconds
-        speed_mbps=$(awk "BEGIN {printf \"%.2f\", 40 / ${duration}}")
-        printf "${COLOR_SUCCESS}Download Speed: %s Mbps (5MB in %ds)${COLOR_RESET}\n" "${speed_mbps}" "${duration}"
+        local speed_bps=$((file_size / duration))
+        local speed_mbps=$(awk "BEGIN {printf \"%.1f\", ${speed_bps} * 8 / 1000000}")
+        
+        printf "${COLOR_SUCCESS}%.1f Mbps${COLOR_RESET}\n" "${speed_mbps}"
+        
+        # Track best speed and totals
+        if (( $(awk "BEGIN {print (${speed_mbps} > ${best_speed})}") )); then
+          best_speed=${speed_mbps}
+        fi
+        total_downloaded=$((total_downloaded + file_size))
+        total_time=$((total_time + duration))
+        ((tests_completed++))
       else
-        printf "${COLOR_SUCCESS}Download Speed: Very fast (< 1 second)${COLOR_RESET}\n"
+        printf "${COLOR_WARN}Too fast to measure${COLOR_RESET}\n"
       fi
-      success=true
-      break
+    else
+      printf "${COLOR_WARN}Failed${COLOR_RESET}\n"
     fi
+    
+    # Stop if we have a good measurement
+    [[ ${tests_completed} -ge 1 && ${best_speed%.*} -gt 5 ]] && break
   done
   
-  if [[ ${success} == false ]]; then
-    printf "${COLOR_WARN}Download test failed - all test servers unreachable${COLOR_RESET}\n"
+  # Try fallback URLs if primary tests failed
+  if [[ ${tests_completed} -eq 0 ]]; then
+    printf "\n${COLOR_INFO}Trying alternative servers...${COLOR_RESET}\n"
+    for fallback in "${fallback_urls[@]}"; do
+      IFS=':' read -r url file_size <<< "${fallback}"
+      printf "Testing fallback server... "
+      
+      local start_time end_time
+      start_time=$(date +%s)
+      
+      if timeout 20 curl -s --max-time 15 -o /dev/null "${url}" 2>/dev/null; then
+        end_time=$(date +%s)
+        local duration=$((end_time - start_time))
+        
+        if [[ ${duration} -gt 0 ]]; then
+          local speed_bps=$((file_size / duration))
+          local speed_mbps=$(awk "BEGIN {printf \"%.1f\", ${speed_bps} * 8 / 1000000}")
+          
+          printf "${COLOR_SUCCESS}%.1f Mbps${COLOR_RESET}\n" "${speed_mbps}"
+          best_speed=${speed_mbps}
+          ((tests_completed++))
+          break
+        fi
+      else
+        printf "${COLOR_WARN}Failed${COLOR_RESET}\n"
+      fi
+    done
   fi
   
-  # Test latency
-  printf "\nTesting latency...\n"
+  # Calculate average speed if multiple tests
+  local avg_speed=${best_speed}
+  if [[ ${total_time} -gt 0 && ${tests_completed} -gt 1 ]]; then
+    local avg_bps=$((total_downloaded / total_time))
+    avg_speed=$(awk "BEGIN {printf \"%.1f\", ${avg_bps} * 8 / 1000000}")
+  fi
+  
+  # Display results
+  printf "\n${COLOR_HILIGHT}Download Speed Results:${COLOR_RESET}\n"
+  if [[ ${tests_completed} -gt 0 ]]; then
+    printf "Best Speed: ${COLOR_SUCCESS}%.1f Mbps${COLOR_RESET}\n" "${best_speed}"
+    [[ ${tests_completed} -gt 1 ]] && printf "Average Speed: ${COLOR_SUCCESS}%.1f Mbps${COLOR_RESET}\n" "${avg_speed}"
+  else
+    printf "${COLOR_WARN}All speed tests failed${COLOR_RESET}\n"
+  fi
+  
+  # Latency test
+  printf "\n${COLOR_INFO}Testing latency...${COLOR_RESET}\n"
   if command -v ping >/dev/null 2>&1; then
-    local ping_result
-    ping_result=$(ping -c 4 8.8.8.8 2>/dev/null | tail -1 | awk -F'/' '{print $5}' 2>/dev/null || echo "N/A")
-    if [[ ${ping_result} != "N/A" ]]; then
-      printf "${COLOR_SUCCESS}Average Latency: %s ms${COLOR_RESET}\n" "${ping_result}"
-    else
-      printf "${COLOR_WARN}Latency test failed${COLOR_RESET}\n"
+    local ping_targets=("8.8.8.8" "1.1.1.1" "208.67.222.222")
+    local ping_names=("Google DNS" "Cloudflare" "OpenDNS")
+    local latency_sum=0
+    local latency_count=0
+    
+    for i in "${!ping_targets[@]}"; do
+      local target="${ping_targets[$i]}"
+      local name="${ping_names[$i]}"
+      
+      local ping_result
+      case "${OS}" in
+        "macOS"|"FreeBSD"|"OpenBSD"|"NetBSD")
+          ping_result=$(ping -c 3 -t 5 "${target}" 2>/dev/null | tail -1 | awk -F'/' '{print $5}' || echo "")
+          ;;
+        *)
+          ping_result=$(ping -c 3 -W 5 "${target}" 2>/dev/null | tail -1 | awk -F'/' '{print $5}' || echo "")
+          ;;
+      esac
+      
+      if [[ -n ${ping_result} && ${ping_result} =~ ^[0-9.]+$ ]]; then
+        printf "${name}: ${COLOR_SUCCESS}%.0f ms${COLOR_RESET}\n" "${ping_result}"
+        latency_sum=$(awk "BEGIN {printf \"%.1f\", ${latency_sum} + ${ping_result}}")
+        ((latency_count++))
+      else
+        printf "${name}: ${COLOR_WARN}Failed${COLOR_RESET}\n"
+      fi
+    done
+    
+    if [[ ${latency_count} -gt 0 ]]; then
+      local avg_latency
+      avg_latency=$(awk "BEGIN {printf \"%.0f\", ${latency_sum} / ${latency_count}}")
+      printf "\n${COLOR_HILIGHT}Average Latency: ${avg_latency} ms${COLOR_RESET}\n"
     fi
   else
     printf "${COLOR_WARN}ping command not available${COLOR_RESET}\n"
   fi
   
-  # Test connectivity
-  printf "\nTesting connectivity...\n"
-  local sites=("google.com" "github.com" "httpbin.org")
-  for site in "${sites[@]}"; do
-    if curl -s --connect-timeout 5 "https://${site}" >/dev/null 2>&1; then
-      printf "${COLOR_SUCCESS}✓ %s reachable${COLOR_RESET}\n" "${site}"
+  # Connection quality assessment
+  if [[ ${tests_completed} -gt 0 ]]; then
+    printf "\n${COLOR_INFO}Connection Quality:${COLOR_RESET} "
+    local speed_num=${best_speed%.*}
+    
+    if [[ ${speed_num} -ge 100 ]]; then
+      printf "${COLOR_SUCCESS}Excellent${COLOR_RESET} (100+ Mbps)\n"
+    elif [[ ${speed_num} -ge 25 ]]; then
+      printf "${COLOR_SUCCESS}Very Good${COLOR_RESET} (25+ Mbps)\n"
+    elif [[ ${speed_num} -ge 10 ]]; then
+      printf "${COLOR_SUCCESS}Good${COLOR_RESET} (10+ Mbps)\n"
+    elif [[ ${speed_num} -ge 5 ]]; then
+      printf "${COLOR_WARN}Fair${COLOR_RESET} (5+ Mbps)\n"
     else
-      printf "${COLOR_WARN}✗ %s unreachable${COLOR_RESET}\n" "${site}"
+      printf "${COLOR_WARN}Poor${COLOR_RESET} (< 5 Mbps)\n"
     fi
-  done
+  fi
   
   pause
 }
